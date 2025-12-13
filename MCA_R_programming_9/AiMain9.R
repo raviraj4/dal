@@ -1,0 +1,199 @@
+df <- read.csv("Mall_Customers.csv")
+
+# Keep only numeric features
+df_num <- df[, sapply(df, is.numeric)]
+head(df_num)
+df_scaled <- scale(df_num)
+set.seed(123)
+wss <- sapply(1:10, function(k){
+  kmeans(df_scaled, centers = k, nstart = 20)$tot.withinss
+})
+
+plot(1:10, wss, type="b", pch=19,
+     xlab="Number of Clusters (K)",
+     ylab="Within Sum of Squares",
+     main="Elbow Method")
+set.seed(123)
+k3 <- kmeans(df_scaled, centers=3, nstart=25)
+
+df$Cluster_Kmeans <- as.factor(k3$cluster)
+
+table(df$Cluster_Kmeans)
+library(ggplot2)
+
+pca <- prcomp(df_scaled)
+pca_df <- data.frame(pca$x[,1:2], Cluster=df$Cluster_Kmeans)
+
+ggplot(pca_df, aes(PC1, PC2, color=Cluster)) +
+  geom_point(size=3) +
+  theme_minimal() +
+  ggtitle("K-Means Clusters (PCA)")
+d <- dist(df_scaled, method="euclidean")
+hc <- hclust(d, method="ward.D2")
+
+plot(hc, labels = FALSE, main="Hierarchical Clustering Dendrogram")
+abline(h = 15, col="red")   # adjust height based on dataset
+df$Cluster_HAC <- cutree(hc, k=3)
+table(df$Cluster_HAC)
+pca_df$Cluster_HAC <- as.factor(df$Cluster_HAC)
+
+ggplot(pca_df, aes(PC1, PC2, color=Cluster_HAC)) +
+  geom_point(size=3) +
+  theme_minimal() +
+  ggtitle("HAC Clusters (PCA)")
+
+
+
+# ----------------------------
+# Enhanced K-Means Visualizations
+# ----------------------------
+set.seed(123)
+
+# --- 1) Install / load packages
+pkgs <- c("ggplot2","factoextra","cluster","gridExtra","GGally","plotly",
+          "reshape2","RColorBrewer","pheatmap","fmsb","ggridges","Rtsne","uwot")
+to_install <- pkgs[!(pkgs %in% installed.packages()[,"Package"])]
+if(length(to_install)) install.packages(to_install)
+
+library(ggplot2); library(factoextra); library(cluster); library(gridExtra)
+library(GGally); library(plotly); library(reshape2); library(RColorBrewer)
+library(pheatmap); library(fmsb); library(ggridges); library(Rtsne); library(uwot)
+
+# --- 2) Ensure k-means result exists, else compute K=3
+if(!exists("df_scaled")) stop("Please create 'df_scaled' (scaled numeric dataframe/matrix) before running the script.")
+if(!exists("k3")){
+  message("k3 not found — computing kmeans with centers = 3")
+  k3 <- kmeans(df_scaled, centers = 3, nstart = 25)
+}
+# Attach cluster labels to df (safe even if previously present)
+df$Cluster_Kmeans <- factor(k3$cluster)
+
+# --- Helper: colors
+k <- length(unique(k3$cluster))
+palette <- brewer.pal(max(3,k), "Set2")
+
+# ----------------------------
+# A. Standard cluster plot with ellipses (PCA space)
+# ----------------------------
+pca <- prcomp(df_scaled, center = TRUE, scale. = TRUE)
+pca_df <- data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2], Cluster = df$Cluster_Kmeans)
+
+p1 <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size=3, alpha=0.9) +
+  stat_ellipse(type="norm", linetype=2, size=0.8) +
+  theme_minimal() + ggtitle("K-Means clusters — PCA (PC1 vs PC2)") +
+  scale_color_manual(values = palette)
+print(p1)
+
+# ----------------------------
+# B. fviz_cluster (factoextra) — shows cluster centers & scatter
+# ----------------------------
+fviz <- fviz_cluster(k3, data = df_scaled, geom = "point", palette = palette,
+                     ggtheme = theme_minimal(), main = "fviz_cluster (K-means)")
+print(fviz)
+
+# ----------------------------
+# C. Silhouette plot (cluster cohesion/separation)
+# ----------------------------
+sil <- silhouette(k3$cluster, dist(df_scaled))
+p2 <- fviz_silhouette(sil) + ggtitle("Silhouette plot (K-Means)")
+print(p2)
+
+# Numeric average silhouette
+avg_sil <- mean(sil[, "sil_width"])
+message(sprintf("Average silhouette width: %.3f", avg_sil))
+
+# ----------------------------
+# D. Pairwise plot (GGally) — colored by cluster (may be slow for many variables)
+# ----------------------------
+# Select up to 8 most informative numeric features (variance heuristic)
+num_df <- as.data.frame(df_scaled)
+vars_by_var <- sort(apply(num_df, 2, var), decreasing = TRUE)
+top_vars <- names(vars_by_var)[1:min(8, length(vars_by_var))]
+pair_df <- data.frame(num_df[, top_vars], Cluster = df$Cluster_Kmeans)
+
+p3 <- ggpairs(pair_df, aes(color = Cluster, alpha = 0.6), columns = 1:length(top_vars)) +
+  theme_minimal() + ggtitle("Pairwise feature relationships (top variables)")
+print(p3)
+
+# ----------------------------
+# E. Cluster centers heatmap / profile
+# ----------------------------
+centers <- k3$centers  # centers are in scaled-space
+rownames(centers) <- paste0("Cluster_", 1:nrow(centers))
+
+pheatmap(centers, cluster_rows = FALSE, cluster_cols = TRUE,
+         main = "Heatmap of Cluster Centers (scaled features)",
+         color = colorRampPalette(c("navy","white","firebrick"))(50))
+
+# ----------------------------
+# F. Radar chart of cluster centers (requires fmsb)
+# ----------------------------
+# Prepare data for radar (fmsb expects min/max rows first)
+centers_df <- as.data.frame(centers)
+# choose subset of features if too many, here take top 6 by variance
+sel_feats <- names(sort(apply(centers_df,2,var), decreasing = TRUE))[1:min(6, ncol(centers_df))]
+radar_df <- centers_df[, sel_feats]
+# create min/max rows for chart scale (use -3 to +3 typical z-scale)
+maxmin <- data.frame(matrix(rep(c(3,-3), each = length(sel_feats)), nrow = 2, byrow = TRUE))
+colnames(maxmin) <- sel_feats
+radar_plot_df <- rbind(maxmin, radar_df)
+rownames(radar_plot_df)[1:2] <- c("max","min")
+
+op <- par(mar=c(1,1,1,1))
+fmsb::radarchart(radar_plot_df, axistype=1,
+                 pcol = palette[1:nrow(centers_df)], pfcol = scales::alpha(palette[1:nrow(centers_df)], 0.4),
+                 plwd=2, cglcol="grey", cglty=1, axislabcol="grey20",
+                 title = "Radar chart — Cluster centers (selected features)")
+legend("topright", legend = rownames(centers_df), col = palette[1:nrow(centers_df)], pch=16, bty="n")
+par(op)
+
+# ----------------------------
+# G. Density / ridgeline plots for each numeric feature by cluster
+# ----------------------------
+# Melt scaled features
+melt_df <- reshape2::melt(cbind(num_df, Cluster = df$Cluster_Kmeans), id.vars = "Cluster")
+# plot top 6 features
+top_feats <- top_vars  # from earlier selection
+p_list <- lapply(top_feats, function(feat){
+  ggplot(subset(melt_df, variable == feat), aes(x = value, y = Cluster, fill = Cluster)) +
+    geom_density_ridges(alpha=0.7, scale=1) +
+    ggtitle(paste("Distribution of", feat, "by cluster (scaled)")) +
+    theme_minimal() + scale_fill_manual(values = palette)
+})
+# show first 3 density plots in a grid
+do.call(grid.arrange, c(p_list[1:min(3,length(p_list))], ncol=1))
+
+# ----------------------------
+# H. 3D interactive scatter of first 3 PCs (plotly)
+# ----------------------------
+pca3_df <- data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2], PC3 = pca$x[,3], Cluster = df$Cluster_Kmeans)
+p_plotly <- plot_ly(pca3_df, x=~PC1, y=~PC2, z=~PC3, color=~Cluster, colors = palette, type='scatter3d', mode='markers') %>%
+  layout(title = "3D PCA scatter (interactive)")
+p_plotly  # opens viewer or browser
+
+# ----------------------------
+# I. t-SNE + UMAP for nonlinear embedding and plotting
+# ----------------------------
+# t-SNE (can be slow)
+tsne_res <- Rtsne::Rtsne(as.matrix(df_scaled), dims = 2, perplexity = 30, verbose = FALSE, check_duplicates = FALSE)
+tsne_df <- data.frame(Dim1 = tsne_res$Y[,1], Dim2 = tsne_res$Y[,2], Cluster = df$Cluster_Kmeans)
+p_tsne <- ggplot(tsne_df, aes(Dim1, Dim2, color = Cluster)) +
+  geom_point(size=2, alpha=0.9) + theme_minimal() + ggtitle("t-SNE embedding (2D)")
+print(p_tsne)
+
+# UMAP
+umap_res <- uwot::umap(as.matrix(df_scaled), n_neighbors = 15, min_dist = 0.1, n_components = 2)
+umap_df <- data.frame(UMAP1 = umap_res[,1], UMAP2 = umap_res[,2], Cluster = df$Cluster_Kmeans)
+p_umap <- ggplot(umap_df, aes(UMAP1, UMAP2, color = Cluster)) +
+  geom_point(size=2, alpha=0.9) + theme_minimal() + ggtitle("UMAP embedding (2D)")
+print(p_umap)
+
+# ----------------------------
+# J. Save plots (examples)
+# ----------------------------
+# ggsave("kmeans_pca_plot.png", p1, width=8, height=6, dpi=300)
+# ggsave("kmeans_silhouette.png", p2, width=8, height=6, dpi=300)
+# htmlwidgets::saveWidget(as_widget(p_plotly), "kmeans_3d_pca.html")  # requires htmlwidgets
+message("Finished: visualizations generated. Uncomment ggsave lines to export PNGs; use htmlwidgets::saveWidget to save interactive plotly HTML.")
+

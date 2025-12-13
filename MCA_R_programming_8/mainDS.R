@@ -1,0 +1,166 @@
+# Implementation and analysis of Classification algorithms:
+# Naive Bayesian, K-Nearest Neighbour, ID3, C4.5
+# Dataset: Breast Cancer Wisconsin (Diagnostic) - Loaded from CSV
+
+# install.packages(c("e1071", "caret", "class", "rpart", "rpart.plot", "RWeka", "partykit"))
+
+library(e1071)      # for naiveBayes()
+library(caret)      # for data splitting & evaluation
+library(class)      # for KNN
+library(rpart)      # for CART Decision Tree
+library(rpart.plot) # for plotting trees
+library(RWeka)      # for ID3 (J48 = C4.5)
+library(partykit)   # for enhanced tree plotting
+
+set.seed(42)
+
+cat("Loading data from 'breastCancer.csv'...\n")
+
+raw_data <- read.csv("breastCancer.csv", stringsAsFactors = TRUE)
+
+df_clean <- raw_data[, 2:(ncol(raw_data) - 1)]
+
+cat("Data cleaning complete. Removed 'id' and trailing empty 'X' column.\n")
+cat("Cleaned dataset dimensions:", dim(df_clean), "\n")
+cat("Final data structure (all predictors are now numeric):\n")
+str(df_clean)
+
+# Ensure the target variable is a factor with meaningful levels
+df_clean$diagnosis <- factor(df_clean$diagnosis, levels = c("B", "M"), labels = c("benign", "malignant"))
+
+# Split Dataset into Training and Testing Sets
+inTrain <- createDataPartition(
+  y = df_clean$diagnosis,
+  p = 0.7,
+  list = FALSE
+)
+
+training <- df_clean[inTrain, ]
+testing <- df_clean[-inTrain, ]
+
+cat(paste("\nTraining set size:", nrow(training), "\n"))
+cat(paste("Testing set size:", nrow(testing), "\n"))
+
+cat("1. NAIVE BAYES CLASSIFIER\n")
+
+# Build Naive Bayes Model
+nb_model <- naiveBayes(diagnosis ~ ., data = training)
+
+# Predict Outcomes on Test Data
+nb_predictions <- predict(nb_model, testing, type = "class")
+
+# Evaluate Results
+nb_conf_matrix <- confusionMatrix(nb_predictions, testing$diagnosis)
+cat("\nConfusion Matrix for Naive Bayes:\n")
+print(nb_conf_matrix)
+
+cat("\nNaive Bayes Model Accuracy on Test Set: ")
+cat(round(nb_conf_matrix$overall['Accuracy'], 4), "\n")
+
+cat("2. K-NEAREST NEIGHBOUR (KNN)\n")
+
+# Create a training control object for cross-validation
+ctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+
+# Tune the KNN model for optimal k value
+knn_fit <- train(diagnosis ~ ., data = training, method = "knn",
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10,
+                 trControl = ctrl)
+
+cat("\nOptimal K value found by tuning:\n")
+print(knn_fit$bestTune)
+
+# Predict KNN
+knn_predictions <- predict(knn_fit, testing)
+knn_conf_matrix <- confusionMatrix(knn_predictions, testing$diagnosis)
+cat("\nConfusion Matrix for KNN (Optimal k):\n")
+print(knn_conf_matrix)
+
+cat("\nKNN Model Accuracy on Test Set: ")
+cat(round(knn_conf_matrix$overall['Accuracy'], 4), "\n")
+
+cat("3. ID3 DECISION TREE\n")
+
+# Build ID3 decision tree (unpruned)
+id3_model <- J48(diagnosis ~ ., data = training, control = Weka_control(U = TRUE))
+
+# Print the ID3 tree
+cat("\nID3 Decision Tree Structure:\n")
+print(id3_model)
+
+# Plot ID3 tree
+cat("\nPlotting ID3 Decision Tree...\n")
+plot(id3_model, main = "ID3 Decision Tree (Unpruned)")
+
+# Predict with ID3
+id3_predictions <- predict(id3_model, testing)
+id3_conf_matrix <- confusionMatrix(id3_predictions, testing$diagnosis)
+cat("\nConfusion Matrix for ID3:\n")
+print(id3_conf_matrix)
+
+cat("\nID3 Model Accuracy on Test Set: ")
+cat(round(id3_conf_matrix$overall['Accuracy'], 4), "\n")
+
+cat("4. C4.5 DECISION TREE\n")
+
+# Build C4.5 decision tree (pruned)
+c45_model <- J48(diagnosis ~ ., data = training, control = Weka_control(C = 0.25, M = 2))
+
+# Print the C4.5 tree
+cat("\nC4.5 Decision Tree Structure:\n")
+print(c45_model)
+
+# Plot C4.5 tree
+cat("\nPlotting C4.5 Decision Tree...\n")
+plot(c45_model, main = "C4.5 Decision Tree (Pruned)")
+
+# Convert to partykit for enhanced plotting
+c45_party <- as.party(c45_model)
+plot(c45_party, main = "C4.5 Decision Tree - Enhanced Plot")
+
+# Predict with C4.5
+c45_predictions <- predict(c45_model, testing)
+c45_conf_matrix <- confusionMatrix(c45_predictions, testing$diagnosis)
+cat("\nConfusion Matrix for C4.5:\n")
+print(c45_conf_matrix)
+
+cat("\nC4.5 Model Accuracy on Test Set: ")
+cat(round(c45_conf_matrix$overall['Accuracy'], 4), "\n")
+
+# Additional CART tree for comparison (using rpart)
+cat("5. CART DECISION TREE (FOR COMPARISON)\n")
+cart_model <- rpart(diagnosis ~ ., data = training, method = "class")
+rpart.plot(cart_model, main = "CART Decision Tree", fallen.leaves = FALSE)
+
+cart_predictions <- predict(cart_model, testing, type = "class")
+cart_conf_matrix <- confusionMatrix(cart_predictions, testing$diagnosis)
+cat("\nCART Model Accuracy on Test Set: ")
+cat(round(cart_conf_matrix$overall['Accuracy'], 4), "\n")
+
+cat("MODEL PERFORMANCE SUMMARY\n")
+
+nb_acc <- round(nb_conf_matrix$overall['Accuracy'], 4)
+knn_acc <- round(knn_conf_matrix$overall['Accuracy'], 4)
+id3_acc <- round(id3_conf_matrix$overall['Accuracy'], 4)
+c45_acc <- round(c45_conf_matrix$overall['Accuracy'], 4)
+cart_acc <- round(cart_conf_matrix$overall['Accuracy'], 4)
+
+cat(paste("Naive Bayes Accuracy:", nb_acc, "\n"))
+cat(paste("KNN Accuracy:", knn_acc, " (Optimal k:", knn_fit$bestTune$k, ")\n"))
+cat(paste("ID3 Accuracy:", id3_acc, "\n"))
+cat(paste("C4.5 Accuracy:", c45_acc, "\n"))
+cat(paste("CART Accuracy:", cart_acc, "\n"))
+
+# Create performance comparison
+performance_df <- data.frame(
+  Algorithm = c("Naive Bayes", "KNN", "ID3", "C4.5", "CART"),
+  Accuracy = c(nb_acc, knn_acc, id3_acc, c45_acc, cart_acc)
+)
+
+cat("\n--- Performance Comparison ---\n")
+print(performance_df)
+
+
+# Clean up environment
+rm(list = ls())
