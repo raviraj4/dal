@@ -1,0 +1,114 @@
+# 1
+mystring <- "Raviraj Mali"
+print(mystring)
+#2
+setwd("C:/Users/RAVIRAJ/OneDrive/Documents/MCA_docs_FY/R_dir/MCA_R_programming")
+getwd()
+#3
+dir()
+#4
+x<-1
+print(x)
+#5
+x<-"Raviraj"
+class(x)
+#6
+x
+#7
+print(x) # explicit printing
+#8
+is.character(x)
+#9
+x<-"3"
+as.integer(x)
+#10
+RavirajVector<-c(1,2,3,4,5,6)
+print(RavirajVector)
+#11
+# mode can be raw, character, complex, numeric, integer, logical
+RavisGreatVec<-vector(mode = "complex", length = 10)
+print(RavisGreatVec)
+#12
+length(RavisGreatVec)
+#13
+x<-1
+y<-2
+x+y
+x-y
+x*y
+y/x
+x^y
+#14 
+RavirajMatrix<-matrix(c(1,2,3,4,5,6,7,8,9), nrow=3, ncol=3)
+print(RavirajMatrix)
+#15
+dim(RavirajMatrix)
+attributes(RavirajMatrix)
+#17
+x<-c(1,2,3)
+y<-c(4,5,6)
+cbind(x,y)
+rbind(x,y)
+#18
+matrixadd=x+y
+matrixsub=x-y
+matrixmul=x*y
+matrixdivide=x/y
+print(matrixadd)
+print(matrixsub)
+print(matrixmul)
+print(matrixdivide)
+#19
+RavirajList = list(1, "Raviraj", 2i + 1, 'c', 3.14)
+print(RavirajList)
+#20
+colors <- factor(c("red", "blue", "green", "red", "blue"))
+print(colors)
+#21
+NameDF = c("Raviraj","Ankit", "Ashish")
+AgeDF = c(21,22,24)
+RavirajDataFrame <- data.frame(Name=NameDF, Age=AgeDF)
+print(RavirajDataFrame)
+#22
+print(RavirajDataFrame$Name)
+filter_df <- subset(RavirajDataFrame, Age > 21)
+print(filter_df)
+ncol(RavirajDataFrame)
+#23
+Raviraj2dmatrix = matrix(c(1,2,3,4,5,6,7,8,9,10), ncol=2, byrow=TRUE)
+RavirajMatrixTable = as.table(Raviraj2dmatrix)
+print(RavirajMatrixTable)
+#24 (25)
+install.packages("readxl")
+library(readxl)
+
+install.packages("readr")
+library(readr)
+
+install.packages("data.table")
+library(data.table)
+install.packages("ggplot2")
+library() 
+
+#25 (26)
+Raviraj<- read.csv("students.csv", sep = ",")
+Raviraj
+RavirajDataFrame <- data.frame(Name=c("Raviraj", "Ankit", "Ashish"),Age=c(21,22,24) )
+write.csv(RavirajDataFrame, "output.csv", row.names = FALSE)
+read.csv("output.csv")
+#26 (27)
+install.packages("XLConnect")
+library(XLConnect)
+workbook = loadWorkbook("grades.xlsx")
+data <- readWorksheet(workbook, sheet="Sheet1")
+head(data)
+#27 (28)
+mat <- matrix(1:9, nrow = 3, ncol = 3)
+element <- mat[2,3] #[row,col]
+print(element)
+
+second_row <- mat[2,]
+second_row
+ 
+subset_mat <- mat[1:2, 1:2]
+subset_mat
